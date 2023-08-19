@@ -13,6 +13,8 @@ LISP files to automate various trigonometric tasks in AUTOCAD.
 4. Click "Submit New Issue"
 
 # Updating
+Install GIT: https://git-scm.com/download/win
+
 If this is your first time, we will clone the repository:
 1. Click `<code>` (top right)
 2. Copy url under HTTPS tab
