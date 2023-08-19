@@ -16,10 +16,11 @@ LISP files to automate various trigonometric tasks in AUTOCAD.
 If this is your first time, we will clone the repository:
 1. Click `<code>` (top right)
 2. Copy url under HTTPS tab
-3. Press Windows button, type in `cmd`
-4. Navigate to wherever you want to "save" this repository
-5. Type `git clone <copied url>`
-6. Use the VLX under the program directory (ex. `SPOT\spot.vlx`) in AutoCAD. 
+3. Press Windows button, type in `cmd`, open command prompt
+4. Navigate to wherever you want to "save" this repository using `cd <directory>`
+   - NOTE: Copy the entire filepath in the file explorer, then paste it as the directory name. You can also navigate one directory at a time.
+6. Type `git clone <copied url>`
+7. Use the VLX under the program directory (ex. `SPOT\spot.vlx`) in AutoCAD. 
 
 If you already have the repository cloned, and simply want to update to latest version:
 1. Press Windows button, type in `cmd`
