@@ -1,9 +1,9 @@
-;;; Visual LISP make file [V1.0] spot saved to:[C:/Users/David/AutoCAD/LISP] at:[6/14/23] 
-(PRV-DEF (:target . "spot.VLX")
+;;; Visual LISP make file [V1.0] SPOT saved to:[C:/Users/dscar/DAVID GIT/AutoLISP/SPOT] at:[4/21/24] 
+(PRV-DEF (:target . "SPOT.VLX")
 	 (:active-x . T)
 	 (:separate-namespace)
 	 (:protected . T)
-	 (:load-file-list (:lsp "faces.lsp"))
+	 (:load-file-list (:lsp "spot.lsp"))
 	 (:require-file-list)
 	 (:ob-directory)
 	 (:tmp-directory)

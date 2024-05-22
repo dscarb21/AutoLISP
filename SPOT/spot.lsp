@@ -1,6 +1,6 @@
 ;; SPOT
 ;; Author: David Scarborough
-(setq *SPOT-VERSION* "1.0.01")
+(setq *SPOT-VERSION* "1.2.0")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;                                                                                                                                                                       ;;
@@ -10,14 +10,13 @@
 ;;                                                                                                                                                                       ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(setq target nil)
-(setq objList nil)
 (setq faces nil)
 
 ;; MAIN COMMAND
 (defun c:spot ()
   (setq initPt (getpoint "\nPick a POINT on the screen: "))
-  (setq target (getreal "\nTarget height: "))
+  (setq target (getTarget))
+  (printHeader)
   (princ "\nPoint: (")
   (princ (strcat (rtos (car initPt)) "," (rtos (cadr initPt))))
   (princ ")\n")
@@ -25,6 +24,15 @@
   (princ target)  
 
   ;; Check if any 3D faces exist
+  (initFaces)
+  
+  ;; Run spot command, print full reportspo 
+  (printRep (spot initPt target))
+  (princ)
+)
+
+;; Initialize all 3D faces
+(defun initFaces ()
   (setq faces (ssget "X" '((0 . "3DFACE"))))
   (if (not faces)
     (progn
@@ -34,15 +42,15 @@
     (setq faceCt (sslength faces))
     
   )
-  
-  (printHeader)
-  ;; Run spot command, print full report
-  (printRep (spot initPt))
-  (princ)
 )
 
-(defun spot (point)
+(defun getTarget ()
+  (setq target (getreal "\nTarget height: "))
+)
+
+(defun spot (point target)
   ;; Iterate through 3D faces
+  (setq objList nil)
   (setq i 0)
   (repeat faceCt
     (setq curPl (ssname faces i))
@@ -55,14 +63,13 @@
         ;; Calculate difference
         (setq difference (- target intersection))
         ;; Create list (Z Intersection, difference, Layer) - difference will only be added if > 0
-        (setq info (if (<= difference 0) (list intersection nil layerName) (list intersection difference layerName)))
+        (setq info (list intersection difference layerName))
         ;; Add to list of lists
         (setq objList (append objList (list info)))
       )
     )
     (setq i (1+ i))
   )
-  
   objList
   
 )
@@ -74,7 +81,7 @@
   (princ "\n|                                 S P O T                                      |")
   (princ "\n|                                                                              |")
   (princ (strcat "\n|                          Author: David Scarborough                           |"))
-  (princ (strcat "\n|                          Version: " *SPOT-VERSION* "                                     |"))
+  (princ (strcat "\n|                          Version: " *SPOT-VERSION* "                                      |"))
   (princ "\n|                                                                              |")
   (princ "\n+------------------------------------------------------------------------------+")
   (princ "\n")
@@ -169,7 +176,7 @@
 (defun calc_inter (point plane)
   ;; Define line parameters
   (setq A (list (car point) (cadr point) (caddr point)))
-  (setq B (list (car point) (cadr point) 100.0)) ; Line extends to z = 100
+  (setq B (list (car point) (cadr point) 1000000000.00)) ; Line extends to z = 1 billion
 
   ;; Get the entity data of the plane
   (setq el (entget plane))
@@ -181,7 +188,7 @@
   (setq D A_p)
   (setq N (cross-product (mapcar '- B_p A_p) (mapcar '- C_p A_p))) ; Normal of the plane
 
-  ;; Calculate intersection
+  ;; Calculate intersection  
   (setq tval (/ (dot-product (mapcar '- D A) N) (dot-product (mapcar '- B A) N)))
   (setq intersection (mapcar '+ A (scale-vector tval (mapcar '- B A))))
 
@@ -211,31 +218,156 @@
 ;;                                                                                                                                                                       ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defun c:spotmp (/ filepath)
+(defun c:spotmp (/ filepath ret points output layerNames retList sortedPoints)
   (setq filepath (getfiled "Select CSV File" "" "csv" 4))
   (if filepath
       (progn
+        
+        (setq ret nil)
+        (setq finals nil)
+        
+        (printMPHeader)
+        (princ "\nInitializing faces . . .")
+        (initFaces)
+        (princ "\nInitializing output CSV . . .")
+        (setq output (createCSV filepath))
+        (princ "\nWriting headers . . .")
+        (writeHeaders output)
+        (princ "\nGetting input format . . .")\
+        (setq input (getInputFormat))
+        (princ "\nReading CSV . . .")
+        (wait 2)
         (setq points (readCSV filepath))
-        ;; Process csvData as needed
-        (princ "\nPoints: ")
-        (princ points)
+        
+        ;; Sort points by order of point number
+        (defun sortPoints (points input)
+          (progn
+            (vl-sort (mapcar 
+                      (function 
+                        (lambda (pt)
+                          (list pt (extractNumDesc pt input))
+                        )
+                      )
+                      points
+                    )
+                    (function
+                      (lambda (a b)
+                        (< (atof (car (cadr a)))
+                            (atof (car (cadr b))))
+                      )
+                    )
+            )
+          )
+        )
+        
+        ;; Sort points and store numDesc
+        (princ "\nSorting points . . .")
+        (wait 2)
+        (setq sortedPoints (sortPoints points input))
+        (princ "\nPerforming SPOT . . .")
+        (wait 2)
+        (foreach pt sortedPoints
+          (setq pointData (car pt))
+          (setq numDesc (cadr pt))
+          (setq xyzStrings (extractXYZStrings pointData input))
+          (setq xyz (mapcar 'atof xyzStrings))
+          (setq target (caddr xyz))
+          (setq ret (spot (list (car xyz) (cadr xyz) 0.0) target))
+
+          ;; Append numDesc to each element of ret to create finals
+          (foreach el ret
+            (setq final (append xyzStrings el))
+            (setq final (append numDesc final))
+            (setq finals (cons final finals))
+          )
+        )
+        ;; Write formatted rows to CSV
+        (writeData output finals)
       )
   )
   (princ)
 )
 
-;; Function to read and parse a CSV file, then print the 'A' column
+
+(defun getInputFormat ()
+  '("pNum" "pDesc" "x" "y" "z")
+)
+
+;; Extracts x y z values based off of input format previously defined
+;; If input format lists "y, z, x" this function will grab the values according to the ones at those
+;; indexes and return a list of those values in the order "x, y, z"
+
+(defun extractXYZStrings (point input)
+  (list (nth (find-index "x" input) point)
+        (nth (find-index "y" input) point)
+        (nth (find-index "z" input) point))
+)
+
+;; Extracts Number and Description bassed off of input format previously defined
+;; Returns list in format: <point number, point description>
+(defun extractNumDesc (point input)
+  (list (nth (find-index "pNum" input) point)
+    (nth (find-index "pDesc" input) point)
+  )
+)
+
+
+
+(defun find-index (element body / index)
+  (setq index 0)
+  (while (and body (/= element (car body)))
+    (setq body (cdr body))
+    (setq index (1+ index))
+  )
+  (if body index nil)
+)
+
+
+;; MP header
+(defun printMPHeader ()
+  (princ "\n+------------------------------------------------------------------------------+")
+  (princ "\n|                                                                              |")
+  (princ "\n|                                S P O T                                       |")
+  (princ "\n|                     M U L T I P L E     P O I N T                            |")
+  (princ "\n|                                                                              |")
+  (princ (strcat "\n|                          Author: David Scarborough                           |"))
+  (princ (strcat "\n|                          Version: " *SPOT-VERSION* "                                      |"))
+  (princ "\n|                                                                              |")
+  (princ "\n+------------------------------------------------------------------------------+")
+  (princ "\n")
+)
+
+
+;; Function to insert an element into a list in sorted order
+(defun insert-sorted (element body)
+  (cond
+    ((null body) (list element)) ;; if list is empty, start a new list with element
+    ((<= element (car body)) (cons element body)) ;; if element is less than or equal to first item, insert at beginning
+    (t (cons (car body) (insert-sorted element (cdr body)))) ;; otherwise, insert element into the rest of the list
+  )
+)
+
+
+;; Function to read and parse csv file
 (defun readCSV (filepath)
   (setq ret '())
   (if (findfile filepath)
       (progn
+        (setq rowNum 0)
         (setq f (open filepath "r"))
-        
-        ;; Iterate through all lines
         (while (setq line (read-line f))
-          (setq row (split-string line ","))
-          (if (and (/= (car row) "") (/= (cadr row) "")) ; Check if both A and B columns have non-empty content
-              (setq ret (append ret (list (cons (car row) (cadr row))))) ; Add tuple to the list
+          (setq row (split-string line ","))          
+          (if (and (/= (car row) "") (/= (cadr row) "") (/= (caddr row) "") (/= (cadddr row) "") (/= (car (cddddr row)) "")) ; Check if A, B, C, D, and E columns have non-empty content
+            (progn
+              (setq ret (append ret (list row))) ; add list to the list
+              (setq rowNum (+ 1 rowNum))
+              (if (= 0 (rem rowNum 1000)) 
+                (progn 
+                  (print "Reading CSV, row:")
+                  (print rowNum)
+                )
+              )
+            )
           )
         )
         (close f)
@@ -247,10 +379,84 @@
   ret
 )
 
+
+;; Function to create a new CSV file in the specified directory
+(defun createCSV (filepath)
+  ;; Extract directory path from the given filepath
+  (setq directory (vl-filename-directory filepath))
+  
+  (setq time (substr (rtos (getvar "MILLISECS") 2 6) 1 8))
+
+  ;; Generate a unique filename
+  (setq filename (strcat "spot_output_" time ".csv"))
+
+  ;; Construct the complete file path
+  (setq newFilepath (strcat directory "\\" filename))
+
+  ;; Attempt to open the file for writing
+  (setq f (open newFilepath "w"))
+
+  ;; Check if the file was opened successfully
+  (if (not f)
+    (progn
+      (princ (strcat "\nError: Unable to create the file - " newFilepath))
+      nil ; Return nil to indicate failure
+    )
+    (progn
+      ;; File opened successfully, write to it and close it
+      (close f) ; Close the file
+      ;; Printing next step here - if I try to print before writeHeaders is called, it waits until writeHeaders is done.
+      newFilepath ; Return the file path
+    )
+  )
+)
+
+(defun writeHeaders (filepath)
+  (setq f (open filepath "w"))
+  (if f
+    (progn
+      (write-line "Point Num.,Point Desc.,X,Y,Target Ht.,Max Ht.,Exceeds By,Layer" f)
+    )
+  )
+  (close f)
+)
+
+(defun writeData (filepath data)
+  (setq f (open filepath "a"))  ; Open the file in append mode
+  (if f  ; Check if the file is successfully opened
+      (progn
+        (princ "\nWriting data to CSV . . .")
+        (foreach cell data
+          (foreach elem cell
+            (princ elem f)  ; Print each element
+            (princ "," f))  ; Separate each element with a space
+          (princ "\n" f)
+        )  ; Add a newline after each list
+        (close f)
+        (princ (strcat "\nComplete. Output: " filepath)) ; Notify user of file creation
+      )  ; Close the file
+  )
+)
+
 (defun split-string (str delimiter)
   (setq result '())
   (while (setq pos (vl-string-search delimiter str))
     (setq result (append result (list (substr str 1 pos))))
     (setq str (substr str (+ pos (strlen delimiter) 1))))
   (setq result (append result (list str)))
+)
+
+(defun orderList (mainList index)
+  (sort mainList 
+        (function 
+          (lambda (a b) 
+            (< (atof (nth index a)) (atof (nth index b)))
+          )
+        )
+  )
+)
+
+(defun wait (seconds / stop)
+  (setq stop (+ (getvar "DATE") (/ seconds 86400.0)))
+  (while (> stop (getvar "DATE")))
 )
